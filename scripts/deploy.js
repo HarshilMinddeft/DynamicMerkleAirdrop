@@ -25,7 +25,7 @@ async function main() {
   distributor = await MerkleDistributor.deploy(
     token.address,
     tree.getHexRoot(),
-    BigNumber.from("3000000000000000000")
+    BigNumber.from("6000000000000000000")
   );
 
   await token
