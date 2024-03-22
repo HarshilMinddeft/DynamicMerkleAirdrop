@@ -40,8 +40,8 @@
       ]
     },
     "C:\\Users\\BAPS\\Desktop\\merkle-distributor-master\\contracts\\MerkleDistributor.sol": {
-      "lastModificationDate": 1710851200836,
-      "contentHash": "b1619205d8ae757e9bb21a33a31a6fa5",
+      "lastModificationDate": 1711100613128,
+      "contentHash": "657560fa9b9d19e9e2e58b0cc3431ee5",
       "sourceName": "contracts/MerkleDistributor.sol",
       "solcConfig": {
         "version": "0.8.19",
@@ -71,7 +71,7 @@
         "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol"
       ],
       "versionPragmas": [
-        "^0.8.19"
+        "^0.8.0"
       ],
       "artifacts": [
         "MerkleDistributor"

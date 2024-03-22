@@ -5,18 +5,25 @@ const fs = require("fs").promises;
 
 async function main() {
   [signer1, signer2] = await ethers.getSigners();
-
   const customAddress = "0x4e25aec97De40E34F503bf123fCad04Afe02046f";
   signer2 = { address: customAddress };
 
-  // signer3 ={address :"0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"}
+  const customAddress3 = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266";
+  signer3 = { address: customAddress3 };
 
-  walletAddresses = [signer1, signer2].map((s) => s.address);
+// signer3 ={address :"0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"}
+
+  walletAddresses = [signer1, signer2, signer3].map((s) => s.address);
 
   leaves = walletAddresses.map((x) => KECCAK256(x));
   tree = new MerkleTree(leaves, KECCAK256, { sortPairs: true });
   PuffCoin = await ethers.getContractFactory("PuffCoin", signer1);
   token = await PuffCoin.deploy();
+  const amounts = [
+    BigNumber.from("5000000000000000000"),
+    BigNumber.from("3000000000000000000"),
+    BigNumber.from("6000000000000000000"),
+  ]; // Amounts for each recipient
   MerkleDistributor = await ethers.getContractFactory(
     "MerkleDistributor",
     signer1
@@ -25,12 +32,13 @@ async function main() {
   distributor = await MerkleDistributor.deploy(
     token.address,
     tree.getHexRoot(),
-    BigNumber.from("6000000000000000000")
+    BigNumber.from("20000000000000000000"),
+    walletAddresses,
+    amounts
   );
-
   await token
     .connect(signer1)
-    .mint(distributor.address, BigNumber.from("90000000000000000000"));
+    .mint(distributor.address, BigNumber.from("70000000000000000000"));
 
   console.log("PuffCoin:", token.address);
   console.log("MerkleDistributor:", distributor.address);
