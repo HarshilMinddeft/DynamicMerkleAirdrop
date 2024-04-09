@@ -1,64 +1,46 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-pragma solidity ^0.8.0;
+pragma solidity ^0.8.2;
 
 import {IERC20, SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {MerkleProof} from "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
 
 contract MerkleDistributor {
     using SafeERC20 for IERC20;
-
     address public immutable token;
     bytes32 public immutable merkleRoot;
-    uint256 public dropAmont;
-
-    mapping(address => uint) private addressesClaimed;
-    // mapping to store token amounts for each address
-    mapping(address => uint256) private addressTokenAmount;
-
-    // This is a packed array of booleans.
-    mapping(uint256 => uint256) private claimedBitMap;
-    event Claimed(address indexed _from, uint _dropAmount);
-
-    constructor(
-        address token_,
-        bytes32 merkleRoot_,
-        uint256 dropAmont_,
-        address[] memory recipients,
-        uint256[] memory amounts
-    ) {
-        require(recipients.length == amounts.length, "Lengths do not match");
+    mapping(address => uint256) private addressesClaimed;
+    event Claimed(address indexed _from, uint256 _dropAmount);
+    constructor(address token_, bytes32 merkleRoot_) {
         token = token_;
         merkleRoot = merkleRoot_;
-        dropAmont = dropAmont_;
-
-        // Set token amounts for each address
-        for (uint256 i = 0; i < recipients.length; i++) {
-            addressTokenAmount[recipients[i]] = amounts[i];
-        }
     }
-
-    function claim(bytes32[] calldata merkleProof) external {
+    function claim(
+        address account,
+        uint256 amount,
+        bytes32[] calldata merkleProof
+    ) external {
         require(
-            addressesClaimed[msg.sender] == 0,
-            "MerkleDistributor:Drop is already calimed"
+            addressesClaimed[account] == 0,
+            "MerkleDistributor: Drop already claimed"
         );
-        // to verify merkle proof
-        bytes32 node = keccak256(abi.encodePacked(msg.sender));
+
+        // Concatenate and encode leaf data
+        bytes32 leafData = keccak256(abi.encodePacked(account, amount));
+
+        // Verify the Merkle proof
         require(
-            MerkleProof.verify(merkleProof, merkleRoot, node),
+            MerkleProof.verify(merkleProof, merkleRoot, leafData),
             "Invalid proof"
         );
-        // Mark it claimed and send the token.
-        addressesClaimed[msg.sender] = 1;
-        uint256 amountToClaim = addressTokenAmount[msg.sender]; // Retrieve the token amount for the claimer
+        addressesClaimed[account] = 1;
+        require(IERC20(token).transfer(account, amount), "Transfer failed");
+        emit Claimed(account, amount);
+    }
+    function transferTokens(uint256 amount) external {
         require(
-            amountToClaim > 0, // Ensure the claimer has a valid token amount set
-            "Token amount not set for the claimer"
+            IERC20(token).allowance(msg.sender, address(this)) >= amount,
+            "MerkleDistributor: Insufficient allowance"
         );
-        require(
-            IERC20(token).transfer(msg.sender, amountToClaim),
-            "Transfer failed"
-        );
-        emit Claimed(msg.sender, amountToClaim);
+        IERC20(token).safeTransferFrom(msg.sender, address(this), amount);
     }
 }

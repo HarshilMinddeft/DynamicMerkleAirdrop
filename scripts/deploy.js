@@ -1,60 +1,105 @@
 const { MerkleTree } = require("merkletreejs");
 const KECCAK256 = require("keccak256");
-const { BigNumber } = require("ethers");
+const { BigNumber, utils } = require("ethers");
 const fs = require("fs").promises;
+// const Users = require("../server/model/userModel.js");
+const mongoose = require("mongoose");
+
+const userSchema = new mongoose.Schema({
+  addresses: [String],
+  claimAmounts: [String],
+});
+
+// Create and register Users model with Mongoose
+const Users = mongoose.model("Users", userSchema);
+
+const URL =
+  "mongodb+srv://harshil:harshil8888@cluster0.nguunro.mongodb.net/AirdropApp?retryWrites=true&w=majority&appName=Cluster0";
+mongoose
+  .connect(URL)
+  .then(async () => {
+    console.log("db connected");
+  })
+  .catch((error) => console.log(error));
+
+////////////////////////////////////////////////////////////////
 
 async function main() {
-  [signer1, signer2] = await ethers.getSigners();
-  const customAddress = "0x4e25aec97De40E34F503bf123fCad04Afe02046f";
-  signer2 = { address: customAddress };
+  const signers = await ethers.getSigners();
 
-  const customAddress3 = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266";
-  signer3 = { address: customAddress3 };
+  //Fetched data from mongoAltas and for making merkelroot and proof
+  const users = await Users.find({}, "addresses claimAmounts");
+  console.log("Users Merkledrop data :", users);
+  const addresses = users.map((user) => user.addresses);
+  const claimAmounts = users.map((user) => user.claimAmounts);
 
-// signer3 ={address :"0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"}
+  const flatAddresses = addresses.flat();
+  const flatClaimAmounts = claimAmounts.flat();
 
-  walletAddresses = [signer1, signer2, signer3].map((s) => s.address);
+  const leaves = flatAddresses.map((address, index) => {
+    const claimAmount = flatClaimAmounts[index];
+    const addressBytes = ethers.utils.arrayify(address);
+    const leafData = Buffer.from(
+      utils
+        .solidityKeccak256(
+          ["address", "uint256"],
+          [addressBytes, claimAmount.toString()]
+        )
+        .substr(2),
+      "hex"
+    );
+    return leafData;
+  });
 
-  leaves = walletAddresses.map((x) => KECCAK256(x));
-  tree = new MerkleTree(leaves, KECCAK256, { sortPairs: true });
-  PuffCoin = await ethers.getContractFactory("PuffCoin", signer1);
-  token = await PuffCoin.deploy();
-  const amounts = [
-    BigNumber.from("5000000000000000000"),
-    BigNumber.from("3000000000000000000"),
-    BigNumber.from("6000000000000000000"),
-  ]; // Amounts for each recipient
-  MerkleDistributor = await ethers.getContractFactory(
+  // Create the Merkle tree
+  const tree = new MerkleTree(leaves, KECCAK256, { sortPairs: true });
+
+  // Deploy PuffCoin contract
+  const PuffCoin = await ethers.getContractFactory("PuffCoin", signers[0]);
+  const token = await PuffCoin.deploy();
+
+  // Deploy MerkleDistributor contract with the calculated Merkle root
+  const MerkleDistributor = await ethers.getContractFactory(
     "MerkleDistributor",
-    signer1
+    signers[0]
   );
-
-  distributor = await MerkleDistributor.deploy(
+  const distributor = await MerkleDistributor.deploy(
     token.address,
-    tree.getHexRoot(),
-    BigNumber.from("20000000000000000000"),
-    walletAddresses,
-    amounts
+    tree.getHexRoot()
   );
-  await token
-    .connect(signer1)
-    .mint(distributor.address, BigNumber.from("70000000000000000000"));
 
+  await token
+    .connect(signers[0])
+    .mint(distributor.address, BigNumber.from("9000000000000000000000"));
+
+  // console.log("Signer addresses:", flatAddresses);
+  // console.log("Signer claimAmonts:", flatClaimAmounts);
+  console.log("Merkle Proofs:");
+  const merkleProofs = [];
+
+  leaves.forEach((leaf, index) => {
+    const proof = tree.getHexProof(leaf);
+    // merkleProofs.push(proof);
+  });
+
+  merkleProofs.forEach((proof, index) => {
+    // Format each proof individually
+    const formattedProof = proof.map((step) => step);
+    console.log("Proof for address", index + 1, ":", formattedProof);
+  });
   console.log("PuffCoin:", token.address);
   console.log("MerkleDistributor:", distributor.address);
-  console.log("signer1:", signer1.address);
-  console.log("Addresses", walletAddresses);
-  const merkleRoot = tree.getHexRoot();
-
-  // Print the 32-byte Merkle root
-  console.log("32-byte Merkle root:", merkleRoot);
-  //This will put all address in json file for frontend
+  console.log("32-byte Merkle root:", tree.getHexRoot());
   const indexedAddresses = {};
-  walletAddresses.map((x, idx) => (indexedAddresses[idx] = x));
+  flatAddresses.forEach((address, idx) => {
+    indexedAddresses[idx] = {
+      address: address,
+      claimAmount: flatClaimAmounts[idx],
+    };
+  });
   const serializedAddresses = JSON.stringify(indexedAddresses);
   await fs.writeFile("client/src/walletAddresses.json", serializedAddresses);
 }
-
 main()
   .then(() => process.exit(0))
   .catch((error) => {
